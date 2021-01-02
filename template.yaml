@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  affiliate-boxy-serverless
+
+Parameters:
+  TableName:
+    Type: String
+    Default: 'affiliate-boxy'
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Runtime: nodejs12.x
+    Timeout: 10
+    Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+
+Resources:
+  ApplicationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      AttributeDefinitions:
+        - AttributeName: 'PK'
+          AttributeType: 'S'
+        - AttributeName: 'SK'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'PK'
+          KeyType: 'HASH'
+        - AttributeName: 'SK'
+          KeyType: 'RANGE'
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      GlobalSecondaryIndexes:
+        - IndexName: InvertedIndex
+          KeySchema:
+            - AttributeName: 'SK'
+              KeyType: HASH
+            - AttributeName: 'PK'
+              KeyType: 'RANGE'
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+            
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: Production
+      Description: Production Stage
+      DeploymentId: !Ref Deployment
+      ApiId: !Ref AffiliateBoxyGateway
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - AddResourceRoute
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+  AffiliateBoxyGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: AffiliateBoxyGateway
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: '$request.body.action'
+
+  Authorizer:
+    Type: "AWS::ApiGatewayV2::Authorizer"
+    Properties:
+      Name: AffiliateBoxyAuthorizer
+      ApiId: !Ref AffiliateBoxyGateway
+      AuthorizerType: REQUEST
+      AuthorizerUri:
+        Fn::Sub:
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerFunction.Arn}/invocations
+      IdentitySource:
+        - "route.request.querystring.token"
+  AuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - AffiliateBoxyGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthorizerFunction
+      Principal: apigateway.amazonaws.com
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/authorizer/
+      Handler: authorizer.lambdaHandler
+      Policies:
+        - AWSLambdaFullAccess
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      RouteKey: $connect
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref Authorizer
+      OperationName: ConnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref ConnectIntegration
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      Description: Connect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnConnectFunction.Arn}/invocations
+  OnConnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - AffiliateBoxyGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnConnectFunction
+      Principal: apigateway.amazonaws.com
+  OnConnectFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: build/on-connect/
+      Handler: on-connect.lambdaHandler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref TableName
+      Environment: 
+        Variables: 
+          TABLE_NAME: !Ref TableName
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref DisconnectIntegration
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      Description: Disconnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnDisconnectFunction.Arn}/invocations
+  OnDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - AffiliateBoxyGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnDisconnectFunction
+      Principal: apigateway.amazonaws.com
+  OnDisconnectFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: build/on-disconnect/
+      Handler: on-disconnect.lambdaHandler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref TableName
+
+  AddResourceRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      RouteKey: AddResource
+      AuthorizationType: NONE
+      OperationName: AddResourceRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref AddResourceIntegration
+  AddResourceIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref AffiliateBoxyGateway
+      Description: AddResource Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AddResourceFunction.Arn}/invocations
+  AddResourcePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - AffiliateBoxyGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AddResourceFunction
+      Principal: apigateway.amazonaws.com
+  AddResourceFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: build/add-resource/
+      Handler: add-resource.lambdaHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
+
+  ScrapeSiteFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: build/scrape-site/
+      Handler: scrape-site.lambdaHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
+            
+  ScrapeAmazonProductsFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: build/scrape-amazon-products/
+      Handler: scrape-amazon-products.lambdaHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
+
+Outputs:
+  WebSocketURI:
+    Description: 'The WSS Protocol URI'
+    Value: !Join [ '', [ 'wss://', !Ref AffiliateBoxyGateway, '.execute-api.',!Ref 'AWS::Region','.amazonaws.com/',!Ref 'Stage'] ]

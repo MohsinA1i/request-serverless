@@ -1,0 +1,42 @@
+{
+    "name": "affiliate-boxy-serverless",
+    "version": "1.0.0",
+    "license": "UNLICENSED",
+    "scripts": {
+        "watch": "rimraf build && cross-env TS_NODE_PROJECT=\"webpack-tsconfig.json\" webpack --watch --env development",
+        "start": "concurrently --kill-others \"yarpm run watch\" \"sam local start-api\"",
+        "debug": "concurrently --kill-others \"yarpm run watch\" \"sam local start-api -d 5858\"",
+        "build": "rimraf build && cross-env TS_NODE_PROJECT=\"webpack-tsconfig.json\" webpack",
+        "deploy": "rimraf build && yarpm run build && sam deploy"
+    },
+    "dependencies": {
+        "aws-sdk": "^2.814.0",
+        "crypto-js": "^4.0.0",
+        "http-proxy-agent": "^4.0.1",
+        "jsonwebtoken": "^8.5.1",
+        "jwk-to-pem": "^2.0.4",
+        "node-fetch": "^2.6.1",
+        "socks-proxy-agent": "^5.0.0",
+        "superagent": "^6.1.0"
+    },
+    "devDependencies": {
+        "@types/aws-lambda": "^8.10.64",
+        "@types/aws-sdk": "^2.7.0",
+        "@types/http-proxy-agent": "^2.0.2",
+        "@types/jsonwebtoken": "^8.5.0",
+        "@types/jwk-to-pem": "^2.0.0",
+        "@types/node": "^14.14.12",
+        "@types/node-fetch": "^2.5.7",
+        "@types/webpack": "^4.41.25",
+        "concurrently": "^5.3.0",
+        "cross-env": "^7.0.3",
+        "rimraf": "^3.0.2",
+        "ts-loader": "^8.0.11",
+        "ts-node": "^9.1.0",
+        "tsconfig-paths": "^3.9.0",
+        "typescript": "^4.1.2",
+        "webpack": "^5.10.1",
+        "webpack-cli": "^4.2.0",
+        "yarpm": "^0.2.1"
+    }
+}

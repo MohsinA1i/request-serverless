@@ -1,0 +1,8 @@
+{
+    "requestContext": {
+        "authorizer": {
+            "userID": "1234-5678-91011"
+        },
+        "connectionId": "121314-151617-181920"
+    }
+}
