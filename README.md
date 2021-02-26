@@ -1,4 +1,6 @@
-# request-serverless
+# Affiliate Boxy Serverless
+Affiliate Boxy helps you manage your affiliate links to popular online stores e.g. Amazon.
+This is the AWS serverless backend for the service.
 
 ## Fetch, tail, and filter Lambda function logs
 
